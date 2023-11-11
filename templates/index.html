@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Text-to-Text</title>
+</head>
+<body>
+    <h1>Text-to-Text Agent</h1>
+    <form action="/submit" method="post">
+        <label for="text_input">Enter your text:</label><br>
+        <textarea id="text_input" name="text_input" rows="4" cols="50"></textarea><br>
+        <input type="submit" value="Submit">
+    </form>
+    <div id="response_area">
+        <!-- The response will be displayed here -->
+    </div>
+
+    <script>
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            fetch('/submit', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response_area').innerText = data;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
