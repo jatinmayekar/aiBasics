@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Record and Upload</title>
+</head>
+<body>
+    <h1>Record Audio</h1>
+    <button id="startRecord">Start Recording</button>
+    <button id="stopRecord" disabled>Stop Recording</button>
+    <audio id="audioPlayback" controls></audio>
+    <button id="uploadAudio" disabled>Upload Audio</button>
+    <!-- ... existing HTML ... -->
+    <div id="transcriptionResult"></div>
+    <!-- ... rest of your HTML ... -->
+
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        console.log("Setting up event listeners...");
+        document.getElementById('startRecord').addEventListener('click', function() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    console.log("Microphone access granted.");
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/mpeg-3' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        document.getElementById('audioPlayback').src = audioUrl;
+                        document.getElementById('uploadAudio').disabled = false;
+                    };
+                    mediaRecorder.start();
+                    document.getElementById('stopRecord').disabled = false;
+                    this.disabled = true;
+                })
+                .catch(e => console.error(e));
+        });
+
+        document.getElementById('stopRecord').addEventListener('click', function() {
+            console.log("Stopping recording...");
+            mediaRecorder.stop();
+            this.disabled = true;
+            document.getElementById('startRecord').disabled = false;
+        });
+
+        document.getElementById('uploadAudio').addEventListener('click', function() {
+            console.log("Uploading audio...");
+            const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.mp3');
+
+            // Replace '/your-upload-endpoint' with the actual endpoint where the audio file will be processed
+            fetch('/transcribe_audio', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Received response from server.");
+                if(data.transcription) {
+                    document.getElementById('transcriptionResult').textContent = 'Transcription: ' + data.transcription;
+                } else if(data.error) {
+                    document.getElementById('transcriptionResult').textContent = 'Error: ' + data.error;
+                }
+            })
+            .catch(error => console.error(error));
+
+            audioChunks = [];
+            this.disabled = true;
+        });
+    </script>
+</body>
+</html>
