@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Speech</title>
+</head>
+<body>
+    <h1>Text to Speech Converter</h1>
+    <form action="/text_to_speech" method="post" id="ttsForm">
+        <label for="text_input">Enter your text:</label><br>
+        <textarea id="text_input" name="text" rows="4" cols="50"></textarea><br>
+        <input type="submit" value="Convert to Speech">
+    </form>
+
+    <!-- Audio element to play speech -->
+    <audio id="speechAudio" controls style="display: none;">
+        <source id="speechSource" src="" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        document.getElementById('ttsForm').onsubmit = function(event) {
+            event.preventDefault();
+
+            fetch('/text_to_speech', {
+                method: 'POST',
+                body: new FormData(this)
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                // Set the source of the audio element to the blob URL
+                const url = URL.createObjectURL(blob);
+                document.getElementById('speechSource').src = url;
+                document.getElementById('speechAudio').style.display = 'block';
+                document.getElementById('speechAudio').load();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        };
+    </script>
+</body>
+</html>
