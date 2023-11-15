@@ -26,6 +26,34 @@
             }
         }
 
+        async function uploadFile(blob) {
+            let formData = new FormData();
+            formData.append("file", blob, "recording.mp3");
+
+            try {
+                let response = await fetch('http://127.0.0.1:8000/upload', { // Use your server URL
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                let result = await response.json();
+                console.log(result);
+                // Update the transcriptionResult div with the transcribed text
+                if (result.transcription) {
+                    document.getElementById('transcriptionResult').textContent = 'Transcription: ' + result.transcription;
+                } else {
+                    // Handle any errors or cases where transcription is not available
+                    document.getElementById('transcriptionResult').textContent = 'Transcription failed or not available';
+                }
+            } catch (e) {
+                console.error('Upload failed:', e);
+            }
+        }
+
         document.getElementById('start-button').addEventListener('click', async () => {
             WebVoiceProcessor.WebVoiceProcessor.subscribe(engine);
         });
@@ -46,6 +74,13 @@
             downloadLink.download = 'recording.mp3';
             downloadLink.textContent = 'Download MP3';
             document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+
+            setTimeout(() => {
+                uploadFile(mp3Blob);
+            }, 100);
+            
         });
     });
   </script>
