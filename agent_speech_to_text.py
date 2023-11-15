@@ -1,8 +1,7 @@
 from flask import Flask, request, jsonify, render_template
-from openai import OpenAI
 import os
-from io import BytesIO
 import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,34 +12,32 @@ client = OpenAI()
 
 @app.route('/')
 def index():
-    return render_template('index3.html')
+    return render_template('index3.html')  # Replace with your HTML filename
 
-@app.route('/transcribe_audio', methods=['POST'])
-def transcribe_audio():
+@app.route('/upload_audio', methods=['POST'])
+def upload_audio():
     if 'audio' not in request.files:
         return jsonify({'error': 'No audio part'}), 400
 
-    file = request.files['audio']
-    if file.filename == '':
+    audio_file = request.files['audio']
+    if audio_file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    if file:
-        # Read file content into a BytesIO object
-        print("processing file")
-        file_stream = BytesIO()
-        file.save(file_stream)
-        file_stream.seek(0)  # Move to the beginning of the BytesIO object
+    # Save the audio file
+    filepath = os.path.join('uploads', audio_file.filename)
+    audio_file.save(filepath)
 
-        #file= open("C:/Users/jatin/Documents/AI/base_1/speech.mp3", "rb")
-        try:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1", 
-                file=file
-            )
-            print(transcript)
-            return jsonify({'transcription': transcript.text})
-        except Exception as e:
+    try:
+        audio_file= open("C:/Users/jatin/Documents/AI/base_1/uploads/Recording.mp3", "rb")
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1", 
+            file=audio_file
+        )
+        return jsonify({'transcription': transcript.text})
+    except Exception as e:
             return jsonify({'error': str(e)}), 500
+    
+    #return jsonify({'message': 'File uploaded successfully', 'filepath': filepath})
 
 if __name__ == '__main__':
     app.run(debug=True)
