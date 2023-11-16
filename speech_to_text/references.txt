@@ -1,0 +1,4 @@
+openai api speech to text: https://platform.openai.com/docs/guides/speech-to-text
+mp3 encoder in javascript: https://github.com/zhuker/lamejs
+web voice porcessor: https://github.com/Picovoice/web-voice-processor instead of mdn web apis
+https://picovoice.ai/blog/how-to-record-audio-from-a-web-browser/
