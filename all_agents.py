@@ -11,7 +11,7 @@ load_dotenv()
 app = Flask(__name__)
 openai.api_key = os.getenv('OPENAI_API_KEY')  # Replace with your actual OpenAI API key
 client = OpenAI()
-debug=False
+debug=True
 
 def get_email_address(email_address):
     return ("here is your latest email at " + email_address + ": " + "Hello, this is a test email.")
@@ -22,7 +22,8 @@ def index():
 
 @app.route('/text_to_speech', methods=['POST'])
 def text_to_speech():
-    text_input = request.form['text']
+    data = request.get_json()
+    text_input = data['text']
     speech_file_path = Path(__file__).parent / "speech.mp3"
 
     response = openai.audio.speech.create(
@@ -32,13 +33,14 @@ def text_to_speech():
     )
     response.stream_to_file(speech_file_path)
 
-    if debug: print("Audio file path: " + speech_file_path)
+    if debug: print("Audio file path: " + str(speech_file_path))
 
     return send_file(speech_file_path, as_attachment=True)
 
 @app.route('/text_to_text_function', methods=['POST'])
 def submit():
-    text_input = request.form['text_input']
+    data = request.get_json()
+    text_input = data['text_input']
     messages=[
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": text_input}
@@ -70,8 +72,8 @@ def submit():
         tool_choice="auto",
     )
 
-    if debug: print("Text to text & function output:" + response)
     message_content = response.choices[0].message.content if response.choices else "No response"
+    if debug: print("Text to text & function first output:" + str(message_content))
 
     response_msg = response.choices[0].message
     tool_calls = response_msg.tool_calls
@@ -104,13 +106,14 @@ def submit():
         second_response = client.chat.completions.create(
             model="gpt-3.5-turbo-1106",
             messages=messages,
-        )  # get a new response from the model where it can see the function response
-    print(second_response)
-    
+        )  # get a new response from the model where it can see the function responses
+
     if second_response == None:
         second_response = response
-        
-    return jsonify(second_response.choices[0].message.content if response.choices else "No response")
+    
+    if debug: print("Text to text & function second output:" + str(second_response.choices[0].message.content))
+
+    return jsonify(second_response.choices[0].message.content if second_response.choices else "No response")
 
 if __name__ == '__main__':
     app.run(debug=True)

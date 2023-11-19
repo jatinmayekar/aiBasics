@@ -6,22 +6,17 @@
     <title>Agent All</title>
 </head>
 <body>
-    <h1>Text-to-Text & Function Agent</h1>
-    <form action="/text_to_text_function" method="post">
+    <h1>Text-to-Text & Speech Agent</h1>
+    <form id="textForm">
         <label for="text_input">Enter your text:</label><br>
         <textarea id="text_input" name="text_input" rows="4" cols="50"></textarea><br>
-        <input type="submit" value="Submit">
+        <input type="button" value="Submit" onclick="submitText()">
     </form>
     <div id="response_area">
         <!-- The response will be displayed here -->
     </div>
-
-    <h1>Text to Speech Agent</h1>
-    <form action="/text_to_speech" method="post" id="ttsForm">
-        <label for="text_input">Enter your text:</label><br>
-        <textarea id="text_input" name="text" rows="4" cols="50"></textarea><br>
-        <input type="submit" value="Convert to Speech">
-    </form>
+    
+    <button onclick="convertToSpeech()" style="display: none;" id="speechButton">Convert to Speech</button>
 
     <!-- Audio element to play speech -->
     <audio id="speechAudio" controls style="display: none;">
@@ -30,29 +25,33 @@
     </audio>
 
     <script>
-        const form = document.querySelector('form');
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
+        function submitText() {
+            const textInput = document.getElementById('text_input').value;
             fetch('/text_to_text_function', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text_input: textInput })
             })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('response_area').innerText = data;
+                document.getElementById('speechButton').style.display = 'block'; // Show the convert to speech button
             })
             .catch(error => {
                 console.error('Error:', error);
             });
-        });
+        }
 
-        document.getElementById('ttsForm').onsubmit = function(event) {
-            event.preventDefault();
-
+        function convertToSpeech() {
+            const text = document.getElementById('response_area').innerText;
             fetch('/text_to_speech', {
                 method: 'POST',
-                body: new FormData(this)
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: text })
             })
             .then(response => response.blob())
             .then(blob => {
@@ -65,7 +64,7 @@
             .catch(error => {
                 console.error('Error:', error);
             });
-        };
+        }
     </script>
 </body>
 </html>
