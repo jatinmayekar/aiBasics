@@ -6,8 +6,8 @@
     <title>Agent All</title>
 </head>
 <body>
-    <h1>Text-to-Text Agent</h1>
-    <form action="/text_to_text" method="post">
+    <h1>Text-to-Text & Function Agent</h1>
+    <form action="/text_to_text_function" method="post">
         <label for="text_input">Enter your text:</label><br>
         <textarea id="text_input" name="text_input" rows="4" cols="50"></textarea><br>
         <input type="submit" value="Submit">
@@ -16,7 +16,7 @@
         <!-- The response will be displayed here -->
     </div>
 
-    <h1>Text to Speech Converter</h1>
+    <h1>Text to Speech Agent</h1>
     <form action="/text_to_speech" method="post" id="ttsForm">
         <label for="text_input">Enter your text:</label><br>
         <textarea id="text_input" name="text" rows="4" cols="50"></textarea><br>
@@ -34,7 +34,7 @@
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
-            fetch('/text_to_text', {
+            fetch('/text_to_text_function', {
                 method: 'POST',
                 body: formData
             })
