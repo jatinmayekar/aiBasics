@@ -8,9 +8,8 @@
 <body>
     <h1>Text-to-Text & Speech Agent</h1>
     <form id="textForm">
-        <label for="text_input">Enter your text:</label><br>
+        <label for="text_input">Your message:</label><br>
         <textarea id="text_input" name="text_input" rows="4" cols="50"></textarea><br>
-        <input type="button" value="Submit" onclick="submitText()">
     </form>
     <div id="response_area">
         <!-- The response will be displayed here -->
@@ -25,6 +24,13 @@
     </audio>
 
     <script>
+        document.getElementById('textForm').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevent default to avoid new line on Enter key
+                submitText();
+            }
+        });
+
         function submitText() {
             const textInput = document.getElementById('text_input').value;
             fetch('/text_to_text_function', {
@@ -37,15 +43,21 @@
             .then(response => response.json())
             .then(data => {
                 document.getElementById('response_area').innerText = data;
-                document.getElementById('speechButton').style.display = 'block'; // Show the convert to speech button
+                convertToSpeech(data); // Directly call convertToSpeech with the response
             })
             .catch(error => {
                 console.error('Error:', error);
             });
         }
 
-        function convertToSpeech() {
-            const text = document.getElementById('response_area').innerText;
+        // Link to sound: https://pixabay.com/sound-effects/search/short/
+        // To avoid loosing audio content due to audio system delay
+        function wakeupAudio() {
+            var tempAudio = new Audio('C:/Users/jatin/Documents/AI/base_1/wakeupAudio.mp3'); // Path to a short silent audio file
+            tempAudio.play();
+        }
+
+        function convertToSpeech(text) {
             fetch('/text_to_speech', {
                 method: 'POST',
                 headers: {
@@ -60,6 +72,13 @@
                 document.getElementById('speechSource').src = url;
                 document.getElementById('speechAudio').style.display = 'block';
                 document.getElementById('speechAudio').load();
+
+                wakeupAudio;
+                // Delay playing the audio by 1 second
+                setTimeout(function() {
+                    document.getElementById('speechAudio').play();
+                }, 10);
+                document.getElementById('speechAudio').play();
             })
             .catch(error => {
                 console.error('Error:', error);
