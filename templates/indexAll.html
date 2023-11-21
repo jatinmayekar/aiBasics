@@ -6,11 +6,13 @@
     <title>Agent All</title>
 </head>
 <body>
-    <h1>Text-to-Text & Speech Agent</h1>
+    <h1>Text/Speech-to-Text&Speech Agent</h1>
     <form id="textForm">
         <label for="text_input">Your message:</label><br>
         <textarea id="text_input" name="text_input" rows="4" cols="50"></textarea><br>
     </form>
+    <button id="recordButton" onclick="startRecording()">Talk to Me</button>
+    <h4>Assistant: </h4>
     <div id="response_area">
         <!-- The response will be displayed here -->
     </div>
@@ -79,6 +81,21 @@
                     document.getElementById('speechAudio').play();
                 }, 10);
                 document.getElementById('speechAudio').play();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        function startRecording() {
+            fetch('/start_recording', {
+                method: 'GET'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message); // Log the transcription
+                document.getElementById('text_input').value = data.message; // Update the textbox
+                submitText(); // Submit the text to the agent
             })
             .catch(error => {
                 console.error('Error:', error);

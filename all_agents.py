@@ -2,16 +2,135 @@ from flask import Flask, render_template, request, jsonify, send_file
 from dotenv import load_dotenv
 from openai import OpenAI
 from pathlib import Path
+from datetime import datetime
 
 import openai
 import os
 import json
+import threading
+import pyaudio
+import wave
+
+# Define the basic parameters for the audio recording
+FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
+CHANNELS = 1              # Number of audio channels (1 for mono, 2 for stereo)
+RATE = 44100              # Sampling rate
+CHUNK = 1024              # Number of frames per buffer
+RECORD_SECONDS = 5       # Duration of recording
+WAVE_OUTPUT_FILENAME = "recording.wav"  # Output filename
 
 load_dotenv()
 app = Flask(__name__)
 openai.api_key = os.getenv('OPENAI_API_KEY')  # Replace with your actual OpenAI API key
 client = OpenAI()
 debug=True
+# Initialize PyAudio
+p = pyaudio.PyAudio()
+# Global variable to indicate when recording is done
+is_recording_complete = False
+
+def get_audio_device_list():
+    # Print the list of available devices and their info
+    print("Available devices:\n")
+    for i in range(p.get_device_count()):
+        print(f"Device {i}: {p.get_device_info_by_index(i).get('name')}")
+
+@app.route('/start_recording', methods=['GET'])
+def start_recording():
+    global is_recording_complete
+    is_recording_complete = False
+    transcription=""
+    def record_audio():
+        print("Recording...")
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+        frames = []
+        for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+            data = stream.read(CHUNK)
+            frames.append(data)
+        stream.stop_stream()
+        stream.close()
+        wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+        is_recording_complete = True
+        print("Finished recording.")
+
+    
+    def transcribe_audio():
+        try:
+            recording_path = "C:/Users/jatin/Documents/AI/base_1/recording.wav"
+            transcript_text = ""
+            
+            audio_file = open(recording_path, "rb")
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file,
+                response_format='text'
+            )
+            
+            # Extract the text from the response
+            transcript_text = transcript['text'] if 'text' in transcript else 'Transcription failed'
+            print(transcript)
+            # Generate a new filename with datetime stamp and 'transcribed' suffix
+            #new_filename = "C:/Users/jatin/Documents/AI/base_1/recording_{}_transcribed.wav".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+            # Rename the file
+            #os.rename(recording_path, new_filename)
+
+            return transcript
+
+        except Exception as e:
+            # Log the exception details
+            app.logger.error('Exception: %s', str(e))
+            # Return a JSON response with the error message and a 500 status code
+            return jsonify({'error': str(e)}), 500
+
+    # Start recording and wait for it to finish
+    record_audio()
+
+    print("here out: " + str(is_recording_complete))
+    # Get the transcription
+    if is_recording_complete==True: 
+        print("here")
+    transcription = transcribe_audio()
+    return jsonify({'message': transcription})
+
+def transcribe_audio():
+    try:
+        recording_path = "C:/Users/jatin/Documents/AI/base_1/recording.wav"
+        transcript_text = ""
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        
+        print(file.content_type)
+
+        if file:
+            with open(recording_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file
+            )
+            transcript_text = transcript.text
+
+            # Generate a new filename with datetime stamp and 'transcribed' suffix
+            new_filename = "C:/Users/jatin/Documents/AI/base_1/recording_{}_transcribed.wav".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+            # Rename the file
+            os.rename(recording_path, new_filename)
+
+            return transcript_text
+
+    except Exception as e:
+        # Log the exception details
+        app.logger.error('Exception: %s', str(e))
+        # Return a JSON response with the error message and a 500 status code
+        return jsonify({'error': str(e)}), 500
 
 def get_email_address(email_address):
     return ("here is your latest email at " + email_address + ": " + "Hello, this is a test email.")
@@ -19,6 +138,11 @@ def get_email_address(email_address):
 @app.route('/')
 def index():
     return render_template('indexAll.html')
+
+@app.route('/start_recording', methods=['GET'])
+def handle_start_recording():
+    message = start_recording()
+    return jsonify({'message': message})
 
 @app.route('/text_to_speech', methods=['POST'])
 def text_to_speech():
