@@ -10,6 +10,7 @@ import json
 import threading
 import pyaudio
 import wave
+import time
 
 # Define the basic parameters for the audio recording
 FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
@@ -239,5 +240,53 @@ def submit():
 
     return jsonify(second_response.choices[0].message.content if second_response.choices else "No response")
 
+@app.route('/linkAssistant', methods=['POST'])
+def callAssistant():
+    # Upload a file with an "assistants" purpose
+    file1 = client.files.create(
+        file=open("C:/Users/jatin/Downloads/swe.txt", "rb"),
+        purpose='assistants'
+    )
+
+    assistant = client.beta.assistants.create(
+        name="Exhibitor Assistant",
+        instructions="You are an greeter at the SWE 2023 conference. You have documents with information about the exhibitors."
+              "Use your knowledgre retrieval skills to answer questions about the exhibitors. ",
+        model="gpt-4-1106-preview",
+        tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
+        file_ids=[file1.id]
+    )
+
+    thread = client.beta.threads.create()
+    data = request.get_json()
+    text_input = data['text_input']
+    print(text_input)
+
+    message = client.beta.threads.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content=text_input
+    )
+    #print(message)
+
+    run = client.beta.threads.runs.create(
+        thread_id=thread.id,
+        assistant_id=assistant.id
+    )
+
+    runStatus = client.beta.threads.runs.retrieve(thread_id=thread.id,run_id=run.id)
+    while run.status != "completed":
+        time.sleep(1)
+        runStatus = client.beta.threads.runs.retrieve(thread_id=thread.id,run_id=run.id)
+        if runStatus.status == "completed":
+            break
+
+    responses = client.beta.threads.messages.list(
+        thread_id=thread.id
+    )
+    print(responses.data[0].content[0].text.value)
+
+    return jsonify(responses.data[0].content[0].text.value)
+    
 if __name__ == '__main__':
     app.run(debug=True)
