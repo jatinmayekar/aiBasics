@@ -25,11 +25,14 @@
         Your browser does not support the audio element.
     </audio>
 
+    <img id="specialImage" src="" alt="Special Image" style="display: none; margin-top: 10px;"/>
+
     <script>
         document.getElementById('textForm').addEventListener('keydown', function(event) {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault(); // Prevent default to avoid new line on Enter key
                 submitText();
+                fetchAndDisplayImage();
             }
         });
 
@@ -44,8 +47,26 @@
             })
             .then(response => response.json())
             .then(data => {
-                document.getElementById('response_area').innerText = data;
-                convertToSpeech(data); // Directly call convertToSpeech with the response
+                //document.getElementById('response_area').innerText = data.text;
+                //convertToSpeech(data); // Directly call convertToSpeech with the response
+
+                const container = document.getElementById('response_area');
+                
+                // Append text
+                const textElement = document.createElement('p');
+                textElement.textContent = data.text;
+                container.appendChild(textElement);
+
+                // Append image if path is provided
+                if (data.imagePath) {
+                    const imageElement = document.createElement('img');
+                    imageElement.src = data.imagePath;
+                    imageElement.alt = 'Dynamic Image';
+                    imageElement.style="display: block;"
+                    container.appendChild(imageElement);
+                }
+
+                convertToSpeech(data.text);
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -96,6 +117,24 @@
                 console.log(data.message); // Log the transcription
                 document.getElementById('text_input').value = data.message; // Update the textbox
                 submitText(); // Submit the text to the agent
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        // Function to get the image info and display the image if necessary
+        function fetchAndDisplayImage() {
+            fetch('/get_image_info')
+            .then(response => response.json())
+            .then(data => {
+                if (data.showImage) {
+                    const imgElement = document.getElementById('dynamicImage');
+                    imgElement.src = data.imagePath;
+                    imgElement.style.display = 'block';
+                } else {
+                    document.getElementById('dynamicImage').style.display = 'none';
+                }
             })
             .catch(error => {
                 console.error('Error:', error);

@@ -1,9 +1,3 @@
-from flask import Flask, render_template, request, jsonify, send_file
-from dotenv import load_dotenv
-from openai import OpenAI
-from pathlib import Path
-from datetime import datetime
-
 import openai
 import os
 import json
@@ -11,6 +5,18 @@ import threading
 import pyaudio
 import wave
 import time
+import geocoder
+import numpy as np
+import cv2
+import tkinter as tk
+import base64
+
+from flask import Flask, render_template, request, jsonify, send_file
+from dotenv import load_dotenv
+from openai import OpenAI
+from pathlib import Path
+from datetime import datetime
+from tkinter import messagebox
 
 # Define the basic parameters for the audio recording
 FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
@@ -29,6 +35,134 @@ debug=True
 p = pyaudio.PyAudio()
 # Global variable to indicate when recording is done
 is_recording_complete = False
+use_camera_flag = False
+
+def get_location():
+    g = geocoder.ip('me')
+    city = g.city
+    country = g.country
+    zipcode = g.postal
+    location_details = "You are in " + city + ", " + country + ". Your zipcode is " + zipcode + "."
+    return location_details
+
+def get_datetime():
+    datetimeobject = datetime.now()
+    date = datetimeobject.strftime("%d-%m-%Y")
+    time = datetimeobject.strftime("%H:%M:%S")
+    date_time = "Today's date is " + date + " and the time is " + time + "."
+    return date_time
+
+def get_permission():
+    # Create a hidden root window
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+
+    # Move the message box to the front
+    root.attributes('-topmost', True)
+
+    # Ask for permission
+    permission = messagebox.askokcancel("Permission", "Do you want to take a picture?", parent=root)
+    root.destroy()
+
+    if permission:
+        return True
+    else:
+        return False
+
+def use_camera():
+    # Ask for permission
+    permission = get_permission()
+
+    if permission:
+        capture_image()
+        return("permisssion granted. photo saved")
+    else:
+        return("permissiong not granted. photo not saved")
+    
+# Function for automatic brightness and contrast optimization using CLAHE
+def auto_adjust_brightness_contrast(image, clip_limit=2.0, tile_grid_size=(8, 8)):
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    l = clahe.apply(l)
+    lab = cv2.merge((l, a, b))
+    adjusted = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    return adjusted
+
+def capture_image():
+    global use_camera_flag
+    #cv2.waitKey(2000)  # Wait for 2000 milliseconds (2 seconds)
+    # Initialize the camera
+    cap = cv2.VideoCapture(0)  # '0' is typically the default value for the laptop's built-in webcam
+
+    # Check if the webcam is opened correctly
+    if not cap.isOpened():
+        raise IOError("Cannot open webcam")
+
+    ret, frame = cap.read()
+    if ret:
+        # Auto adjusting brightness and contrast
+        frame = auto_adjust_brightness_contrast(frame)
+
+        # Display the resulting frame
+        cv2.imshow('frame', frame)
+
+        cv2.waitKey()  # Wait for 2000 milliseconds (2 seconds)
+
+        # Save the captured image to a file
+        cv2.imwrite('/static/images/webcam_image.jpg', frame)
+        use_camera_flag =True
+        print("Image captured and saved successfully.")
+    else:
+        print("Failed to capture image")
+
+    # Release the camera
+    cap.release()
+
+# Function to encode the image
+def encode_image(image_path):
+  with open(image_path, "rb") as image_file:
+    return base64.b64encode(image_file.read()).decode('utf-8')
+
+def analyze_image():
+    global use_camera_flag
+    if use_camera_flag == False:
+        capture_image()
+    else:
+        # Path to your image
+        image_path = "webcam_image.jpg"
+
+        # Getting the base64 string
+        base64_image = encode_image(image_path)
+
+        PROMPT_MESSAGES = [
+        {
+            "role": "user",
+            "content": [
+            {
+                "type": "text",
+                "text": "This is an image from the webcam of the users laptop. describe the image and provide a caption for linkedin"
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            }
+            ],
+        },
+        ]   
+        params = {
+            "model": "gpt-4-vision-preview",
+            "messages": PROMPT_MESSAGES,
+            "max_tokens": 500,
+        }
+
+        result = client.chat.completions.create(**params)
+        vision_output = result.choices[0].message.content
+
+    print("vision output: ", vision_output)
+    return vision_output
 
 def get_audio_device_list():
     # Print the list of available devices and their info
@@ -242,6 +376,8 @@ def submit():
 
 @app.route('/linkAssistant', methods=['POST'])
 def callAssistant():
+    global use_camera_flag
+
     # Upload a file with an "assistants" purpose
     file1 = client.files.create(
         file=open("C:/Users/jatin/Downloads/swe.txt", "rb"),
@@ -253,8 +389,77 @@ def callAssistant():
         instructions="You are an greeter at the SWE 2023 conference. You have documents with information about the exhibitors."
               "Use your knowledgre retrieval skills to answer questions about the exhibitors. ",
         model="gpt-4-1106-preview",
-        tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
-        file_ids=[file1.id]
+        tools=[
+            {"type": "code_interpreter"},
+            {"type":"retrieval"},
+            {"type": "function",
+             "function": {
+                 "name": "get_location",
+                 "description": "Get the location of the user.",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
+            },
+            {"type": "function",
+             "function": {
+                 "name": "get_datetime",
+                 "description": "Get the date and time of the user.",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
+            },
+            {"type": "function",
+             "function": {
+                 "name": "use_camera",
+                 "description": "Use the webcam camera to capture an image of the user or any object in the frame of the webcam.",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
+            },
+            {"type": "function",
+             "function": {
+                 "name": "analyze_image",
+                 "description": "Use this to analyze the image captured by the webcam and describe the image as reponse."
+                 "It will automatically call the image capture function."
+                 "Also use this also to see the user, surroudings, and objects in the scene.",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
+            },
+        ],
+        file_ids=[file1.id],
     )
 
     thread = client.beta.threads.create()
@@ -274,19 +479,58 @@ def callAssistant():
         assistant_id=assistant.id
     )
 
-    runStatus = client.beta.threads.runs.retrieve(thread_id=thread.id,run_id=run.id)
-    while run.status != "completed":
-        time.sleep(1)
+    while True:
         runStatus = client.beta.threads.runs.retrieve(thread_id=thread.id,run_id=run.id)
+        print("Thread status: " + runStatus.status)
         if runStatus.status == "completed":
             break
+        if runStatus.status == "requires_action":
+            msg=[]
+            tool_calls = runStatus.required_action.submit_tool_outputs.tool_calls
+            for i in range(len(tool_calls)):
+                if tool_calls[i].function.name == "get_location":
+                    msg.append({
+                        "tool_call_id": tool_calls[i].id,
+                        "output": get_location()
+                    })
+                if tool_calls[i].function.name == "get_datetime":
+                    msg.append({
+                        "tool_call_id": tool_calls[i].id,
+                        "output": get_datetime()
+                    })
+                if tool_calls[i].function.name == "use_camera":
+                    msg.append({
+                        "tool_call_id": tool_calls[i].id,
+                        "output": use_camera()
+                    })
+                if tool_calls[i].function.name == "analyze_image":
+                    msg.append({
+                        "tool_call_id": tool_calls[i].id,
+                        "output": analyze_image()
+                    })
+            print("tool output: ", msg)
+            run = client.beta.threads.runs.submit_tool_outputs(
+                thread_id=thread.id,
+                run_id=run.id,
+                tool_outputs=msg
+            )
+        time.sleep(2)
 
     responses = client.beta.threads.messages.list(
         thread_id=thread.id
     )
     print(responses.data[0].content[0].text.value)
 
-    return jsonify(responses.data[0].content[0].text.value)
-    
+    text = responses.data[0].content[0].text.value
+
+    image_path = ""
+    if use_camera_flag:
+        image_path = "/static/images/webcam_image.jpg"
+
+    image_path = image_path.replace("\\", "/")
+    print("image path: ", image_path)
+    #return jsonify(responses.data[0].content[0].text.value)
+    return jsonify({'text': text, 'imagePath': image_path})
+
 if __name__ == '__main__':
     app.run(debug=True)
