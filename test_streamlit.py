@@ -26,6 +26,10 @@ load_dotenv()
 # Initialize logging
 logging.basicConfig(filename='chatgpt_analyzer.log', level=logging.INFO)
 
+# Suppress info logging from OpenAI API only warnings and errors will still be logged
+logging.getLogger('openai._base_client').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
 openai.api_key = os.getenv("OPEN_API_KEY")
 if 'client' not in st.session_state:
     st.session_state.client = OpenAI()
@@ -33,20 +37,7 @@ if 'client' not in st.session_state:
 st.title("OpenAI Bot")
 
 # Function to log conversation and other details
-def log_conversation_details(user_query, ai_response, thread_id, turn_count, start_time, end_time):
-    # Basic Interaction Data
-    logging.info(f"Timestamp: {datetime.now()}, User Request: {user_query}, AI Response: {ai_response}")
-
-    # Conversation Context
-    logging.info(f"Thread ID: {thread_id}, Turn Count: {turn_count}")
-
-    # User Interaction Patterns
-    duration = (end_time - start_time).total_seconds()
-    logging.info(f"Response Time: {duration} seconds")
-
-# Placeholder functions for sentiment and topic analysis
-def analyze_conversation(conversation_history):
-    # Implement sentiment analysis
+def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_time, end_time, conversation_history):
     if 'analyzer' not in st.session_state:
         st.session_state.analyzer = st.session_state.client.beta.assistants.create(
             name="Chat Analyzer",
@@ -90,8 +81,19 @@ def analyze_conversation(conversation_history):
     )
 
     analyzer_response_value = analyzer_response.data[0].content[0].text.value
+    print("Analyzer response: ", analyzer_response_value)
 
-    return analyzer_response_value
+    log_entry = {
+        "timestamp": str(datetime.now()),
+        "user_request": user_query,
+        "ai_response": ai_response,
+        "thread_id": thread_id,
+        "turn_count": turn_count,
+        "response_time_seconds": (end_time - start_time).total_seconds(),
+        "analyzer_response": analyzer_response_value
+    }
+
+    logging.info(json.dumps(log_entry))
 
 with st.sidebar:
     uploaded_file = st.file_uploader("Choose a file")   
@@ -194,7 +196,6 @@ if prompt:
         messages = st.session_state.client.beta.threads.messages.list(
             thread_id=st.session_state.thread.id
         )
-    #st.success("Done!")
 
     print(messages.data[0].content[0].text.value)
     response = messages.data[0].content[0].text.value
@@ -206,15 +207,10 @@ if prompt:
 
     end_time = datetime.now()
 
-    log_conversation_details(user_query=prompt, ai_response=response, 
-                             thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
-                             start_time=start_time, end_time=end_time)
-
-    print("Conversation history: ", json.dumps(st.session_state.messages))
+    #print("Conversation history: ", json.dumps(st.session_state.messages))
 
     # Analyze sentiment and topics
-    analyzer_response_log = analyze_conversation(json.dumps(st.session_state.messages))
-    print("Analyzer reponse log: ", analyzer_response_log)
+    analyze_conversation(user_query=prompt, ai_response=response, 
+                             thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
+                             start_time=start_time, end_time=end_time, conversation_history=json.dumps(st.session_state.messages))
 
-    # Additional logging for analysis
-    logging.info(f"Analyzer: {analyzer_response_log}")
