@@ -13,6 +13,8 @@ import time
 import datetime
 import random
 import re
+import logging
+from datetime import datetime
 
 from io import StringIO
 
@@ -21,11 +23,75 @@ from load_dotenv import load_dotenv
 
 load_dotenv()
 
+# Initialize logging
+logging.basicConfig(filename='chatgpt_analyzer.log', level=logging.INFO)
+
 openai.api_key = os.getenv("OPEN_API_KEY")
 if 'client' not in st.session_state:
     st.session_state.client = OpenAI()
 
 st.title("OpenAI Bot")
+
+# Function to log conversation and other details
+def log_conversation_details(user_query, ai_response, thread_id, turn_count, start_time, end_time):
+    # Basic Interaction Data
+    logging.info(f"Timestamp: {datetime.now()}, User Request: {user_query}, AI Response: {ai_response}")
+
+    # Conversation Context
+    logging.info(f"Thread ID: {thread_id}, Turn Count: {turn_count}")
+
+    # User Interaction Patterns
+    duration = (end_time - start_time).total_seconds()
+    logging.info(f"Response Time: {duration} seconds")
+
+# Placeholder functions for sentiment and topic analysis
+def analyze_conversation(conversation_history):
+    # Implement sentiment analysis
+    if 'analyzer' not in st.session_state:
+        st.session_state.analyzer = st.session_state.client.beta.assistants.create(
+            name="Chat Analyzer",
+            instructions="You are an highly analytical and detail-oriented AI acting as AI Interaction Analyst." 
+            "In this role, you will be responsible for meticulously examining and interpreting the interactions between users and large language AI models." 
+            "Your insights will be pivotal in enhancing this AI's performance, improving user experience, and guiding the strategic direction of this AI's development."
+            "Your input will be given the messages between a user and an AI."
+            "Your output should be to sentiment of the user and a normalized sentiment score, topics discussed, frequency of discussion of these topics,"
+            "accuracy of AI responses based on subsequent user messages, issues/error/feedbacks/pain points from the user based on the user messages, "
+            "final direction to optimize the AI to suit the user",
+            tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
+            model="gpt-4-1106-preview"
+        )
+
+    if 'analyzer_thread' not in st.session_state:
+        st.session_state.analyzer_thread = st.session_state.client.beta.threads.create()   
+
+    analyzer_message = st.session_state.client.beta.threads.messages.create(
+        thread_id=st.session_state.analyzer_thread.id,
+        role="user",
+        content=conversation_history
+    )
+
+    analyzer_run = st.session_state.client.beta.threads.runs.create(
+        thread_id=st.session_state.analyzer_thread.id,
+        assistant_id=st.session_state.analyzer.id,
+    )
+
+    while True:
+        print("analyzing")
+        time.sleep(2)
+        analyzer_run_retrieve = st.session_state.client.beta.threads.runs.retrieve(
+            thread_id=st.session_state.analyzer_thread.id,
+            run_id=analyzer_run.id
+        )
+        if analyzer_run_retrieve.status == "completed":
+            break
+
+    analyzer_response = st.session_state.client.beta.threads.messages.list(
+        thread_id=st.session_state.analyzer_thread.id
+    )
+
+    analyzer_response_value = analyzer_response.data[0].content[0].text.value
+
+    return analyzer_response_value
 
 with st.sidebar:
     uploaded_file = st.file_uploader("Choose a file")   
@@ -58,6 +124,8 @@ prompt = st.chat_input("ask here...")
 if prompt=="exit":
     st.stop()
 if prompt: 
+    start_time = datetime.now()
+
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -136,4 +204,17 @@ if prompt:
     with st.chat_message("assistant"):
         st.markdown(response)
 
-    #bot.write(messages.data[0].content[0].text.value)
+    end_time = datetime.now()
+
+    log_conversation_details(user_query=prompt, ai_response=response, 
+                             thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
+                             start_time=start_time, end_time=end_time)
+
+    print("Conversation history: ", json.dumps(st.session_state.messages))
+
+    # Analyze sentiment and topics
+    analyzer_response_log = analyze_conversation(json.dumps(st.session_state.messages))
+    print("Analyzer reponse log: ", analyzer_response_log)
+
+    # Additional logging for analysis
+    logging.info(f"Analyzer: {analyzer_response_log}")
