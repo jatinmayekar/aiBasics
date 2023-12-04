@@ -69,18 +69,21 @@ if prompt:
             bytes_data = uploaded_file.getvalue()
             
             file_name = uploaded_file.name
-            #print(file_name)
+            print(file_name)
+            print(st.session_state.prev_uploaded_file)
 
             if st.session_state.prev_uploaded_file is not file_name:
                 print("File changed")
-                with open('swe_exhibitor_file.pdf', 'wb') as f:
+                with open('swe_exhibitor_list.pdf', 'wb') as f:
                     f.write(bytes_data)
                 st.success("PDF file saved successfully.")
 
                 file_1 = st.session_state.client.files.create(
-                    file=open("swe_exhibitor_file.pdf", "rb"),
+                    file=open("swe_exhibitor_list.pdf", "rb"),
                     purpose='assistants'
                 )
+
+                st.session_state.prev_uploaded_file = file_name
 
                 message = st.session_state.client.beta.threads.messages.create(
                     thread_id=st.session_state.thread.id,
