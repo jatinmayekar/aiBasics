@@ -57,19 +57,19 @@ if "prev_uploaded_file" not in st.session_state:
 prompt = st.chat_input("ask here...")
 if prompt=="exit":
     st.stop()
-if prompt:  
-    with st.spinner("Thinking..."):  
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+if prompt: 
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
+    with st.status("Thinking...", expanded=True) as status:  
         if uploaded_file is not None:
             # To read file as bytes:
             bytes_data = uploaded_file.getvalue()
             
             file_name = uploaded_file.name
-            print(file_name)
+            #print(file_name)
 
             if st.session_state.prev_uploaded_file is not file_name:
                 print("File changed")
@@ -110,18 +110,20 @@ if prompt:
         )
 
         while True:
-            time.sleep(1)
+            time.sleep(2)
             run = st.session_state.client.beta.threads.runs.retrieve(
                 thread_id=st.session_state.thread.id,
                 run_id=run.id
             )
+            status.update(label=run.status, state="running", expanded=True)
             if run.status == "completed":
+                status.update(label=run.status, state="complete", expanded=True)
                 break
 
         messages = st.session_state.client.beta.threads.messages.list(
             thread_id=st.session_state.thread.id
         )
-    st.success("Done!")
+    #st.success("Done!")
 
     print(messages.data[0].content[0].text.value)
     response = messages.data[0].content[0].text.value
