@@ -41,13 +41,35 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
     if 'analyzer' not in st.session_state:
         st.session_state.analyzer = st.session_state.client.beta.assistants.create(
             name="Chat Analyzer",
-            instructions="You are an highly analytical and detail-oriented AI acting as AI Interaction Analyst." 
-            "In this role, you will be responsible for meticulously examining and interpreting the interactions between users and large language AI models." 
-            "Your insights will be pivotal in enhancing this AI's performance, improving user experience, and guiding the strategic direction of this AI's development."
-            "Your input will be given the messages between a user and an AI."
-            "Your output should be to sentiment of the user and a normalized sentiment score, topics discussed, frequency of discussion of these topics,"
-            "accuracy of AI responses based on subsequent user messages, issues/error/feedbacks/pain points from the user based on the user messages, "
-            "final direction to optimize the AI to suit the user",
+            instructions = "You are a highly analytical and detail-oriented AI, designated as an AI Interaction Analyst. "
+                "In this role, you will meticulously examine and interpret interactions between users and large "
+                "language AI models. Your analysis will be instrumental in enhancing AI performance, enriching user "
+                "experience, and influencing the strategic development of the AI system.\n\n"
+                "Your input comprises messages exchanged between a user and an AI. From these messages, your analysis "
+                "should produce:\n\n"
+                "1. **Detailed Sentiment Analysis**: Identify the sentiment of the user, including emotional tones "
+                "and intensity, and provide a normalized sentiment score.\n"
+                "2. **Topic Analysis**: Catalogue topics discussed, their frequency, and context, highlighting the "
+                "user's primary areas of interest.\n"
+                "3. **Engagement & Curiosity Metrics**: Assess the level and nature of user engagement and curiosity "
+                "throughout the conversation.\n"
+                "4. **Behavioral Insights**: Deduce insights into user behavioral traits, such as speculative thinking, "
+                "ethical considerations, and information processing style.\n"
+                "5. **User Preferences & Predictions**: Offer predictive insights into the user's potential interests "
+                "in products and content, based on the conversational topics.\n"
+                "6. **AI Response Evaluation**: Evaluate the accuracy and relevance of AI responses in relation to "
+                "subsequent user messages.\n"
+                "7. **Ethical & Societal Concerns**: Note any ethical and societal concerns raised by the user, "
+                "particularly regarding technology and AI.\n"
+                "8. **Content & Advertising Recommendations**: Provide suggestions for content themes and advertising "
+                "strategies that align with the user's interests and discussions.\n"
+                "9. **Conversational Dynamics**: Analyze the conversational style and dynamics, recommending "
+                "optimizations for AI interactions to better suit the user's preferences and conversational style.\n"
+                "10. **Identification of Misconceptions & Queries**: Identify areas where the user may have "
+                "misconceptions or unique viewpoints, suggesting potential areas for clarification or further information.\n\n"
+                "Your objective is to extend beyond enhancing user experience. Aim to unearth deep insights into the "
+                "user's preferences, interests, and engagement patterns. This information is invaluable for tailoring "
+                "personalized content and developing effective advertising strategies that resonate with the user.",
             tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
             model="gpt-4-1106-preview"
         )
@@ -55,33 +77,36 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
     if 'analyzer_thread' not in st.session_state:
         st.session_state.analyzer_thread = st.session_state.client.beta.threads.create()   
 
-    analyzer_message = st.session_state.client.beta.threads.messages.create(
-        thread_id=st.session_state.analyzer_thread.id,
-        role="user",
-        content=conversation_history
-    )
-
-    analyzer_run = st.session_state.client.beta.threads.runs.create(
-        thread_id=st.session_state.analyzer_thread.id,
-        assistant_id=st.session_state.analyzer.id,
-    )
-
-    while True:
-        print("analyzing")
-        time.sleep(2)
-        analyzer_run_retrieve = st.session_state.client.beta.threads.runs.retrieve(
+    with st.status("Analyzing...", expanded=False) as status:
+        analyzer_message = st.session_state.client.beta.threads.messages.create(
             thread_id=st.session_state.analyzer_thread.id,
-            run_id=analyzer_run.id
+            role="user",
+            content=conversation_history
         )
-        if analyzer_run_retrieve.status == "completed":
-            break
 
-    analyzer_response = st.session_state.client.beta.threads.messages.list(
-        thread_id=st.session_state.analyzer_thread.id
-    )
+        analyzer_run = st.session_state.client.beta.threads.runs.create(
+            thread_id=st.session_state.analyzer_thread.id,
+            assistant_id=st.session_state.analyzer.id,
+        )
 
-    analyzer_response_value = analyzer_response.data[0].content[0].text.value
-    print("Analyzer response: ", analyzer_response_value)
+        while True:
+            print("analyzing")
+            time.sleep(2)
+            analyzer_run_retrieve = st.session_state.client.beta.threads.runs.retrieve(
+                thread_id=st.session_state.analyzer_thread.id,
+                run_id=analyzer_run.id
+            )
+            status.update(label=analyzer_run_retrieve.status, state="running", expanded=False)
+            if analyzer_run_retrieve.status == "completed":
+                status.update(label=analyzer_run_retrieve.status, state="complete", expanded=False)
+                break
+
+        analyzer_response = st.session_state.client.beta.threads.messages.list(
+            thread_id=st.session_state.analyzer_thread.id
+        )
+
+        analyzer_response_value = analyzer_response.data[0].content[0].text.value
+        print("Analyzer response: ", analyzer_response_value)
 
     log_entry = {
         "timestamp": str(datetime.now()),
