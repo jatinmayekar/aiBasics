@@ -34,7 +34,14 @@ logging.getLogger('openai._base_client').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
 user_id = 46
-start_time = 0
+user_query=""
+ai_response="" 
+thread_id=0 
+turn_count=0
+start_time = datetime.now()
+end_time=datetime.now()
+conversation_history=""
+analyzer_response_value_display=""
 
 # Initialize session state if not already done
 if 'timestamps' not in st.session_state:
@@ -57,6 +64,7 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
                 "experience, and influencing the strategic development of the AI system.\n\n"
                 "Your input comprises messages exchanged between a user and an AI. From these messages, your analysis "
                 "should produce:\n\n"
+                "1. **Top keywords**: Top keywords used by the user and the AI\n"
                 "1. **Detailed Sentiment Analysis**: Identify the sentiment of the user, including emotional tones "
                 "and intensity, and provide a normalized sentiment score.\n"
                 "2. **Topic Analysis**: Catalogue topics discussed, their frequency, and context, highlighting the "
@@ -129,6 +137,7 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
     }
 
     logging.info(json.dumps(log_entry))
+    return analyzer_response_value
 
 with st.sidebar:
     uploaded_file = st.file_uploader("Choose a file")   
@@ -243,8 +252,16 @@ if prompt:
 
     #print("Conversation history: ", json.dumps(st.session_state.messages))
 
+    user_query=prompt
+    ai_response=response
+    thread_id=st.session_state.thread.id
+    turn_count=len(st.session_state.messages)
+    start_time = start_time
+    end_time=end_time
+    conversation_history=json.dumps(st.session_state.messages)
+
     # Analyze sentiment and topics
-    analyze_conversation(user_query=prompt, ai_response=response, 
+    analyzer_response_value_display=analyze_conversation(user_query=prompt, ai_response=response, 
                              thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
                              start_time=start_time, end_time=end_time, conversation_history=json.dumps(st.session_state.messages))
 
@@ -275,3 +292,11 @@ with st.sidebar:
 
         # Display the plot in Streamlit
         st.pyplot(plt)
+
+    response_time_seconds = (end_time - start_time).total_seconds()
+    
+    st.write("Thread ID: ", thread_id)
+    st.write("Count: ", turn_count)
+    st.write("response_time_seconds ",str(response_time_seconds))
+    st.write("conversation_history ", conversation_history)
+    st.write("analyzer_response_value ", analyzer_response_value_display)
