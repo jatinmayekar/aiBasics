@@ -14,6 +14,9 @@ import datetime
 import random
 import re
 import logging
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
 
 from io import StringIO
@@ -29,6 +32,13 @@ logging.basicConfig(filename='chatgpt_analyzer.log', level=logging.INFO)
 # Suppress info logging from OpenAI API only warnings and errors will still be logged
 logging.getLogger('openai._base_client').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
+
+user_id = 46
+start_time = 0
+
+# Initialize session state if not already done
+if 'timestamps' not in st.session_state:
+    st.session_state['timestamps'] = []
 
 openai.api_key = os.getenv("OPEN_API_KEY")
 if 'client' not in st.session_state:
@@ -122,7 +132,6 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
 
 with st.sidebar:
     uploaded_file = st.file_uploader("Choose a file")   
-    st.button("Analyze", type="primary")
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -239,3 +248,30 @@ if prompt:
                              thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
                              start_time=start_time, end_time=end_time, conversation_history=json.dumps(st.session_state.messages))
 
+with st.sidebar:
+    st.title("Analyzer")
+    st.write("User ID ", user_id)
+    st.write("Timestamp ", start_time)
+
+    current_time = pd.Timestamp.now()  # or use any other method to get the current time
+    st.session_state['timestamps'].append(current_time)
+
+    # Convert to DataFrame
+    df = pd.DataFrame({'Timestamp': st.session_state['timestamps']})
+
+    # Plotting (if there are timestamps)
+    if not df.empty:
+        # Extracting hour of the day for daily analysis
+        df['Hour'] = df['Timestamp'].dt.hour
+
+        # Plotting Hourly Distribution
+        plt.figure(figsize=(10, 4))
+        sns.histplot(df['Hour'], bins=24, kde=False)
+        plt.title('Hourly Interaction Frequency')
+        plt.xlabel('Hour of the Day')
+        plt.ylabel('Number of Interactions')
+        plt.xticks(range(0, 24))
+        plt.grid(True)
+
+        # Display the plot in Streamlit
+        st.pyplot(plt)
