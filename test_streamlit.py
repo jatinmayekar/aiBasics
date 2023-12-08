@@ -1,4 +1,5 @@
 import openai
+import tiktoken
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -33,6 +34,7 @@ logging.basicConfig(filename='chatgpt_analyzer.log', level=logging.INFO)
 logging.getLogger('openai._base_client').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
+ai_model = "gpt-4-1106-preview"
 user_id = 46
 user_query=""
 ai_response="" 
@@ -42,6 +44,56 @@ start_time = datetime.now()
 end_time=datetime.now()
 conversation_history=""
 analyzer_response_value_display=""
+#encoding = tiktoken.get_encoding("cl100k_base")
+user_token = 0
+ai_token = 0
+total_tokens = 0
+
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
+    """Return the number of tokens used by a list of messages."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Warning: model not found. Using cl100k_base encoding.")
+        encoding = tiktoken.get_encoding("cl100k_base")
+    if model in {
+        "gpt-3.5-turbo-0613",
+        "gpt-3.5-turbo-16k-0613",
+        "gpt-4-0314",
+        "gpt-4-32k-0314",
+        "gpt-4-0613",
+        "gpt-4-32k-0613",
+        }:
+        tokens_per_message = 3
+        tokens_per_name = 1
+    elif model == "gpt-3.5-turbo-0301":
+        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_name = -1  # if there's a name, the role is omitted
+    elif "gpt-3.5-turbo" in model:
+        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
+    elif "gpt-4" in model:
+        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        return num_tokens_from_messages(messages, model="gpt-4-0613")
+    else:
+        raise NotImplementedError(
+            f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens."""
+        )
+    num_tokens = 0
+    for message in messages:
+        num_tokens += tokens_per_message
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(value))
+            if key == "name":
+                num_tokens += tokens_per_name
+    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+    return num_tokens
 
 # Initialize session state if not already done
 if 'timestamps' not in st.session_state:
@@ -54,7 +106,7 @@ if 'client' not in st.session_state:
 st.title("OpenAI Bot")
 
 # Function to log conversation and other details
-def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_time, end_time, conversation_history):
+def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id, turn_count, start_time, end_time, conversation_history):
     if 'analyzer' not in st.session_state:
         st.session_state.analyzer = st.session_state.client.beta.assistants.create(
             name="Chat Analyzer",
@@ -64,6 +116,7 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
                 "experience, and influencing the strategic development of the AI system.\n\n"
                 "Your input comprises messages exchanged between a user and an AI. From these messages, your analysis "
                 "should produce:\n\n"
+                "1. Response to custom user question for analysis {user_query_analysis}\n"
                 "1. **Top keywords**: Top keywords used by the user and the AI\n"
                 "1. **Detailed Sentiment Analysis**: Identify the sentiment of the user, including emotional tones "
                 "and intensity, and provide a normalized sentiment score.\n"
@@ -89,7 +142,7 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
                 "user's preferences, interests, and engagement patterns. This information is invaluable for tailoring "
                 "personalized content and developing effective advertising strategies that resonate with the user.",
             tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
-            model="gpt-4-1106-preview"
+            model=ai_model
         )
 
     if 'analyzer_thread' not in st.session_state:
@@ -124,15 +177,26 @@ def analyze_conversation(user_query, ai_response, thread_id, turn_count, start_t
         )
 
         analyzer_response_value = analyzer_response.data[0].content[0].text.value
-        print("Analyzer response: ", analyzer_response_value)
+        print("Analyzer response: ", analyzer_response)
+    
+    # user_token_length = num_tokens_from_string(user_query, encoding)
+    # ai_token_length = num_tokens_from_string(ai_response, encoding)
+    # total_tokens = num_tokens_from_messages(st.session_state.messages, model=ai_model)
+
+    user_token_length = 0
+    ai_token_length = 0
+    total_tokens = 0
 
     log_entry = {
         "timestamp": str(datetime.now()),
-        "user_request": user_query,
-        "ai_response": ai_response,
         "thread_id": thread_id,
         "turn_count": turn_count,
         "response_time_seconds": (end_time - start_time).total_seconds(),
+        "user_request": user_query,
+        "ai_response": ai_response,
+        "user_token_length": user_token_length,
+        "ai_token_length": ai_token_length,
+        "total_tokens": total_tokens,
         "analyzer_response": analyzer_response_value
     }
 
@@ -260,43 +324,53 @@ if prompt:
     end_time=end_time
     conversation_history=json.dumps(st.session_state.messages)
 
-    # Analyze sentiment and topics
-    analyzer_response_value_display=analyze_conversation(user_query=prompt, ai_response=response, 
-                             thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
-                             start_time=start_time, end_time=end_time, conversation_history=json.dumps(st.session_state.messages))
+    # # Analyze sentiment and topics
+    # analyzer_response_value_display=analyze_conversation(user_query_analysis, user_query=prompt, ai_response=response, 
+    #                          thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
+    #                          start_time=start_time, end_time=end_time, conversation_history=json.dumps(st.session_state.messages))
 
 with st.sidebar:
     st.title("Analyzer")
-    st.write("User ID ", user_id)
-    st.write("Timestamp ", start_time)
+    user_query_analysis = st.text_input('Add your custom user question for analysis here:')
+    print("User query analysis: ", user_query_analysis)
+    if st.button("Analyze"):
+        # Analyze sentiment and topics
+        analyzer_response_value_display=analyze_conversation(user_query_analysis=user_query_analysis, user_query=prompt, ai_response=ai_response, 
+                                thread_id=st.session_state.thread.id, turn_count=len(st.session_state.messages),
+                                start_time=start_time, end_time=end_time, conversation_history=json.dumps(st.session_state.messages))
+        st.write("User ID ", user_id)
+        st.write("Model: gpt-4-1106-preview")
+        st.write("Timestamp ", start_time)
 
-    current_time = pd.Timestamp.now()  # or use any other method to get the current time
-    st.session_state['timestamps'].append(current_time)
+        current_time = pd.Timestamp.now()  # or use any other method to get the current time
+        st.session_state['timestamps'].append(current_time)
 
-    # Convert to DataFrame
-    df = pd.DataFrame({'Timestamp': st.session_state['timestamps']})
+        # Convert to DataFrame
+        df = pd.DataFrame({'Timestamp': st.session_state['timestamps']})
 
-    # Plotting (if there are timestamps)
-    if not df.empty:
-        # Extracting hour of the day for daily analysis
-        df['Hour'] = df['Timestamp'].dt.hour
+        # Plotting (if there are timestamps)
+        if not df.empty:
+            # Extracting hour of the day for daily analysis
+            df['Hour'] = df['Timestamp'].dt.hour
 
-        # Plotting Hourly Distribution
-        plt.figure(figsize=(10, 4))
-        sns.histplot(df['Hour'], bins=24, kde=False)
-        plt.title('Hourly Interaction Frequency')
-        plt.xlabel('Hour of the Day')
-        plt.ylabel('Number of Interactions')
-        plt.xticks(range(0, 24))
-        plt.grid(True)
+            # Plotting Hourly Distribution
+            plt.figure(figsize=(10, 4))
+            sns.histplot(df['Hour'], bins=24, kde=False)
+            plt.title('Hourly Interaction Frequency')
+            plt.xlabel('Hour of the Day')
+            plt.ylabel('Number of Interactions')
+            plt.xticks(range(0, 24))
+            plt.grid(True)
 
-        # Display the plot in Streamlit
-        st.pyplot(plt)
+            # Display the plot in Streamlit
+            st.pyplot(plt)
 
-    response_time_seconds = (end_time - start_time).total_seconds()
-    
-    st.write("Thread ID: ", thread_id)
-    st.write("Count: ", turn_count)
-    st.write("response_time_seconds ",str(response_time_seconds))
-    st.write("conversation_history ", conversation_history)
-    st.write("analyzer_response_value ", analyzer_response_value_display)
+        response_time_seconds = (end_time - start_time).total_seconds()
+        
+        st.write("Thread ID: ", thread_id)
+        st.write("Count: ", turn_count)
+        st.write("response_time_seconds ",str(response_time_seconds))
+        st.write("conversation_history ", conversation_history)
+        st.write("analyzer_response_value ", analyzer_response_value_display)
+    else:
+        st.write("Click on Analyze to get the analysis")
