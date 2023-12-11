@@ -19,6 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+from pathlib import Path
 
 from io import StringIO
 
@@ -204,7 +205,10 @@ def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id
     return analyzer_response_value
 
 with st.sidebar:
-    uploaded_file = st.file_uploader("Choose a file")   
+    st.title("Audio Output")
+    response_audio_flag = st.toggle("Enable audio output", value=True)
+    st.title("Upload files here")
+    uploaded_file = st.file_uploader("Choose a file") 
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -230,6 +234,7 @@ if "prev_uploaded_file" not in st.session_state:
     st.session_state.prev_uploaded_file = None
 
 prompt = st.chat_input("ask here...")
+
 if prompt=="exit":
     st.stop()
 if prompt: 
@@ -314,7 +319,20 @@ if prompt:
 
     end_time = datetime.now()
 
-    #print("Conversation history: ", json.dumps(st.session_state.messages))
+    if response_audio_flag and response != "":
+        text_input = response
+        speech_file_path = Path(__file__).parent / "speech.mp3"
+
+        response_audio = st.session_state.client.audio.speech.create(
+            model="tts-1-1106",
+            voice="onyx",
+            input=text_input
+        )
+        response_audio.stream_to_file(speech_file_path)
+
+        audio_file = open(speech_file_path, 'rb')
+        audio_bytes = audio_file.read()
+        st.audio(audio_bytes, format='audio/mp3')
 
     user_query=prompt
     ai_response=response
