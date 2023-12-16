@@ -4,6 +4,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import pyaudio
+import wave
 
 from openai import OpenAI
 import os
@@ -49,6 +51,16 @@ analyzer_response_value_display=""
 user_token = 0
 ai_token = 0
 total_tokens = 0
+
+# Define the basic parameters for the audio recording
+FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
+CHANNELS = 1              # Number of audio channels (1 for mono, 2 for stereo)
+RATE = 44100              # Sampling rate
+CHUNK = 1024              # Number of frames per buffer
+RECORD_SECONDS = 5       # Duration of recording
+WAVE_OUTPUT_FILENAME = "recording.wav"  # Output filename
+
+p = pyaudio.PyAudio()
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -205,8 +217,13 @@ def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id
     return analyzer_response_value
 
 with st.sidebar:
-    st.title("Audio Output")
-    response_audio_flag = st.toggle("Enable audio output", value=True)
+    st.title("Audio Input")
+    input_audio_flag = st.toggle("Enable audio input", value=False)
+
+    #st.title("Audio Output")
+    #response_audio_flag = st.toggle("Enable audio output", value=True)
+    response_audio_flag = True
+
     st.title("Upload files here")
     uploaded_file = st.file_uploader("Choose a file") 
 
@@ -233,11 +250,68 @@ if 'thread' not in st.session_state:
 if "prev_uploaded_file" not in st.session_state: 
     st.session_state.prev_uploaded_file = None
 
-prompt = st.chat_input("ask here...")
+def record_audio():
+        print("Recording...")
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+        frames = []
+        for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+            data = stream.read(CHUNK)
+            frames.append(data)
+        stream.stop_stream()
+        stream.close()
+        wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+        print("Finished recording.")
+        return True
 
-if prompt=="exit":
-    st.stop()
-if prompt: 
+def transcribe_audio():
+    try:
+        recording_path = "C:/Users/jatin/Documents/AI/base_1/recording.wav"
+        transcript_text = ""
+        
+        audio_file = open(recording_path, "rb")
+        transcript = st.session_state.client.audio.transcriptions.create(
+            model="whisper-1", 
+            file=audio_file,
+            response_format='text'
+        )
+        
+        # Extract the text from the response
+        transcript_text = transcript['text'] if 'text' in transcript else 'Transcription failed'
+        print(transcript)
+        # Generate a new filename with datetime stamp and 'transcribed' suffix
+        #new_filename = "C:/Users/jatin/Documents/AI/base_1/recording_{}_transcribed.wav".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+        # Rename the file
+        #os.rename(recording_path, new_filename)
+
+        return transcript
+
+    except Exception as e:
+        # Log the exception details
+        return "error"
+
+prompt = ""
+prompt_audio = ""
+print("Input audio flag: ", input_audio_flag)
+if input_audio_flag:
+    with st.chat_message("assistant"):
+        st.markdown("Recording for 5 seconds...")
+    if record_audio()==True: 
+        prompt_audio = transcribe_audio()
+        if prompt_audio != "":
+            prompt = prompt + "Audio prompt: " + prompt_audio + ". \n"
+        print("Prompt audio: ", prompt_audio)
+
+prompt_text = st.chat_input("Ask here...")
+if prompt_text is not None:
+    prompt = f"{prompt} \n Text Prompt: {prompt_text}"
+print("Prompt: ", prompt)
+
+if prompt != "": 
     start_time = datetime.now()
 
     # Add user message to chat history
