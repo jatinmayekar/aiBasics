@@ -238,7 +238,7 @@ for message in st.session_state.messages:
 if 'assistant' not in st.session_state:
     st.session_state.assistant = st.session_state.client.beta.assistants.create(
         name="Exhibitor Assistant",
-        instructions="You are an greeter at the SWE 2023 conference. You have documents with information about the exhibitors."
+        instructions="You are a greeter at the SWE 2023 conference. You have documents with information about the exhibitors."
                     "Use your knowledgre retrieval skills to answer questions about the exhibitors.",
         tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
         model="gpt-4-1106-preview"
@@ -307,6 +307,7 @@ if input_audio_flag:
         print("Prompt audio: ", prompt_audio)
 
 prompt_text = st.chat_input("Ask here...")
+
 if prompt_text is not None:
     prompt = f"{prompt} \n Text Prompt: {prompt_text}"
 print("Prompt: ", prompt)
@@ -390,6 +391,8 @@ if prompt != "":
     st.session_state.messages.append({"role": "assistant", "content": response})
     with st.chat_message("assistant"):
         st.markdown(response)
+
+    input_audio_flag = False
 
     end_time = datetime.now()
 
