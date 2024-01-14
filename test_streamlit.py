@@ -128,28 +128,28 @@ def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id
                 "language AI models. Your analysis will be instrumental in enhancing AI performance, enriching user "
                 "experience, and influencing the strategic development of the AI system.\n\n"
                 "Your input comprises messages exchanged between a user and an AI. From these messages, your analysis "
-                "should produce:\n\n"
+                "mus respond to the following tersely:\n\n"
                 "1. Response to custom user question for analysis {user_query_analysis}\n"
-                "1. **Top keywords**: Top keywords used by the user and the AI\n"
-                "1. **Detailed Sentiment Analysis**: Identify the sentiment of the user, including emotional tones "
+                "2. **Top keywords**: Top keywords used by the user and the AI\n"
+                "3. **Detailed Sentiment Analysis**: Identify the sentiment of the user, including emotional tones "
                 "and intensity, and provide a normalized sentiment score.\n"
-                "2. **Topic Analysis**: Catalogue topics discussed, their frequency, and context, highlighting the "
+                "4. **Topic Analysis**: Catalogue topics discussed, their frequency, and context, highlighting the "
                 "user's primary areas of interest.\n"
-                "3. **Engagement & Curiosity Metrics**: Assess the level and nature of user engagement and curiosity "
+                "5. **Engagement & Curiosity Metrics**: Assess the level and nature of user engagement and curiosity "
                 "throughout the conversation.\n"
-                "4. **Behavioral Insights**: Deduce insights into user behavioral traits, such as speculative thinking, "
+                "6. **Behavioral Insights**: Deduce insights into user behavioral traits, such as speculative thinking, "
                 "ethical considerations, and information processing style.\n"
-                "5. **User Preferences & Predictions**: Offer predictive insights into the user's potential interests "
+                "7. **User Preferences & Predictions**: Offer predictive insights into the user's potential interests "
                 "in products and content, based on the conversational topics.\n"
-                "6. **AI Response Evaluation**: Evaluate the accuracy and relevance of AI responses in relation to "
+                "8. **AI Response Evaluation**: Evaluate the accuracy and relevance of AI responses in relation to "
                 "subsequent user messages.\n"
-                "7. **Ethical & Societal Concerns**: Note any ethical and societal concerns raised by the user, "
+                "9. **Ethical & Societal Concerns**: Note any ethical and societal concerns raised by the user, "
                 "particularly regarding technology and AI.\n"
-                "8. **Content & Advertising Recommendations**: Provide suggestions for content themes and advertising "
+                "10. **Content & Advertising Recommendations**: Provide suggestions for content themes and advertising "
                 "strategies that align with the user's interests and discussions.\n"
-                "9. **Conversational Dynamics**: Analyze the conversational style and dynamics, recommending "
+                "11. **Conversational Dynamics**: Analyze the conversational style and dynamics, recommending "
                 "optimizations for AI interactions to better suit the user's preferences and conversational style.\n"
-                "10. **Identification of Misconceptions & Queries**: Identify areas where the user may have "
+                "12. **Identification of Misconceptions & Queries**: Identify areas where the user may have "
                 "misconceptions or unique viewpoints, suggesting potential areas for clarification or further information.\n\n"
                 "Your objective is to extend beyond enhancing user experience. Aim to unearth deep insights into the "
                 "user's preferences, interests, and engagement patterns. This information is invaluable for tailoring "
@@ -174,7 +174,7 @@ def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id
         )
 
         while True:
-            print("analyzing")
+            print("Analyzing...")
             time.sleep(2)
             analyzer_run_retrieve = st.session_state.client.beta.threads.runs.retrieve(
                 thread_id=st.session_state.analyzer_thread.id,
@@ -240,7 +240,41 @@ if 'assistant' not in st.session_state:
         name="Exhibitor Assistant",
         instructions="You are a greeter at the SWE 2023 conference. You have documents with information about the exhibitors."
                     "Use your knowledgre retrieval skills to answer questions about the exhibitors.",
-        tools=[{"type": "code_interpreter"},{"type":"retrieval"}],
+        tools=[{"type": "code_interpreter"},{"type":"retrieval"},
+                           {"type": "function",
+             "function": {
+                 "name": "use_camera",
+                 "description": "Use the webcam camera to capture an image of the user or any object in the frame of the webcam.",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
+            },
+            {"type": "function",
+             "function": {
+                 "name": "analyze_image",
+                 "description": "Use this to analyze the image captured by the webcam and describe the image as reponse."
+                 "It will automatically call the image capture function."
+                 "Also use this also to see the user, surroudings, and objects in the scene.",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
+            }],
         model="gpt-4-1106-preview"
     )
 
@@ -331,12 +365,12 @@ if prompt != "":
 
             if st.session_state.prev_uploaded_file is not file_name:
                 print("File changed")
-                with open('swe_exhibitor_list.pdf', 'wb') as f:
+                with open(file_name, 'wb') as f:
                     f.write(bytes_data)
                 st.success("PDF file saved successfully.")
 
                 file_1 = st.session_state.client.files.create(
-                    file=open("swe_exhibitor_list.pdf", "rb"),
+                    file=open(file_name, "rb"),
                     purpose='assistants'
                 )
 
