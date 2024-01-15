@@ -57,6 +57,9 @@ ai_token = 0
 total_tokens = 0
 imageFlag = False
 use_camera_flag = False
+prompt = ""
+createImageFlag = False
+image_url = ""
 
 # Define the basic parameters for the audio recording
 FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
@@ -275,6 +278,21 @@ def analyze_image():
     print("vision output: ", vision_output)
     return vision_output
 
+def create_image():
+    response = st.session_state.client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                size="1024x1024",
+                quality="standard",
+                n=1,
+            )
+    
+    image_url = response.data[0].url
+    print("Image URL: ", image_url)
+    if image_url != "":
+        createImageFlag = True
+    return image_url
+
 def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id, turn_count, start_time, end_time, conversation_history):
     if 'analyzer' not in st.session_state:
         st.session_state.analyzer = st.session_state.client.beta.assistants.create(
@@ -440,6 +458,22 @@ if 'assistant' not in st.session_state:
                         "required": []
                 }
             }
+            },
+            {"type": "function",
+             "function": {
+                 "name": "create_image",
+                 "description": "Creates an image from the text input using Dall-e-3 image generation model of OpenAI",
+                 "parameters": {
+                        "type": "object",
+                        "properties": {
+                                "user": {
+                                "type": "string",
+                                "description": "Name of the user"
+                                },
+                        },
+                        "required": []
+                }
+            }
             }],
         model="gpt-4-1106-preview"
     )
@@ -450,7 +484,7 @@ if 'thread' not in st.session_state:
 if "prev_uploaded_file" not in st.session_state: 
     st.session_state.prev_uploaded_file = None
 
-prompt = ""
+#prompt = ""
 prompt_audio = ""
 print("Input audio flag: ", input_audio_flag)
 if input_audio_flag:
@@ -560,6 +594,11 @@ if prompt != "":
                             "tool_call_id": tool_calls[i].id,
                             "output": analyze_image()
                         })
+                    if tool_calls[i].function.name == "create_image":
+                        msg.append({
+                            "tool_call_id": tool_calls[i].id,
+                            "output": create_image()
+                        })
                 print("tool output: ", msg)
                 run = st.session_state.client.beta.threads.runs.submit_tool_outputs(
                     thread_id=st.session_state.thread.id,
@@ -582,6 +621,8 @@ if prompt != "":
         st.markdown(response)
         if imageFlag: 
             st.image(imageOpen, channels="BGR", output_format="JPEG")
+        if createImageFlag:
+            st.image(image_url)
 
     input_audio_flag = False
     end_time = datetime.now()
