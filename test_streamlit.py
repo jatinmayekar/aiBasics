@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pyaudio
 import wave
+import cv2
 
 from openai import OpenAI
 import os
@@ -22,8 +23,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 from pathlib import Path
+import tkinter as tk
+import base64
 
 from io import StringIO
+from tkinter import messagebox
 
 import load_dotenv
 from load_dotenv import load_dotenv
@@ -61,6 +65,50 @@ RECORD_SECONDS = 5       # Duration of recording
 WAVE_OUTPUT_FILENAME = "recording.wav"  # Output filename
 
 p = pyaudio.PyAudio()
+
+def record_audio():
+        print("Recording...")
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+        frames = []
+        for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+            data = stream.read(CHUNK)
+            frames.append(data)
+        stream.stop_stream()
+        stream.close()
+        wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+        print("Finished recording.")
+        return True
+
+def transcribe_audio():
+    try:
+        recording_path = "C:/Users/jatin/Documents/AI/base_1/recording.wav"
+        transcript_text = ""
+        
+        audio_file = open(recording_path, "rb")
+        transcript = st.session_state.client.audio.transcriptions.create(
+            model="whisper-1", 
+            file=audio_file,
+            response_format='text'
+        )
+        
+        # Extract the text from the response
+        transcript_text = transcript['text'] if 'text' in transcript else 'Transcription failed'
+        print(transcript)
+        # Generate a new filename with datetime stamp and 'transcribed' suffix
+        #new_filename = "C:/Users/jatin/Documents/AI/base_1/recording_{}_transcribed.wav".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+        # Rename the file
+        #os.rename(recording_path, new_filename)
+
+        return transcript
+
+    except Exception as e:
+        # Log the exception details
+        return "error"
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -108,17 +156,121 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
     return num_tokens
 
-# Initialize session state if not already done
-if 'timestamps' not in st.session_state:
-    st.session_state['timestamps'] = []
+def get_permission():
+    # Create a hidden root window
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
 
-openai.api_key = os.getenv("OPEN_API_KEY")
-if 'client' not in st.session_state:
-    st.session_state.client = OpenAI()
+    # Move the message box to the front
+    root.attributes('-topmost', True)
 
-st.title("OpenAI Bot")
+    # Ask for permission
+    permission = messagebox.askokcancel("Permission", "Do you want to take a picture?", parent=root)
+    root.destroy()
 
-# Function to log conversation and other details
+    if permission:
+        return True
+    else:
+        return False
+
+def use_camera():
+    # Ask for permission
+    permission = get_permission()
+
+    if permission:
+        capture_image()
+        return("permisssion granted. photo saved")
+    else:
+        return("permissiong not granted. photo not saved")
+    
+# Function for automatic brightness and contrast optimization using CLAHE
+def auto_adjust_brightness_contrast(image, clip_limit=2.0, tile_grid_size=(8, 8)):
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    l = clahe.apply(l)
+    lab = cv2.merge((l, a, b))
+    adjusted = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    return adjusted
+    
+def capture_image():
+    global use_camera_flag
+    #cv2.waitKey(2000)  # Wait for 2000 milliseconds (2 seconds)
+    # Initialize the camera
+    cap = cv2.VideoCapture(0)  # '0' is typically the default value for the laptop's built-in webcam
+
+    # Check if the webcam is opened correctly
+    if not cap.isOpened():
+        raise IOError("Cannot open webcam")
+
+    ret, frame = cap.read()
+    if ret:
+        # Auto adjusting brightness and contrast
+        frame = auto_adjust_brightness_contrast(frame)
+
+        # Display the resulting frame
+        cv2.imshow('frame', frame)
+
+        cv2.waitKey()  # Wait for 2000 milliseconds (2 seconds)
+
+        # Save the captured image to a file
+        
+        if not cv2.imwrite(r'C:\Users\jatin\Documents\AI\base_1\static\images\webcam_image.jpg', frame):
+            raise RuntimeError("Unable to capture image")
+        else:
+            print("Image captured and saved successfully.")
+            use_camera_flag =True
+    else:
+        print("Failed to capture image")
+
+    # Release the camera
+    cap.release()
+
+# Function to encode the image
+def encode_image(image_path):
+  with open(image_path, "rb") as image_file:
+    return base64.b64encode(image_file.read()).decode('utf-8')
+
+def analyze_image():
+    global use_camera_flag
+    if use_camera_flag == False:
+        capture_image()
+    else:
+        # Path to your image
+        image_path = r"C:\Users\jatin\Documents\AI\base_1\static\images\webcam_image.jpg"
+
+        # Getting the base64 string
+        base64_image = encode_image(image_path)
+
+        PROMPT_MESSAGES = [
+        {
+            "role": "user",
+            "content": [
+            {
+                "type": "text",
+                "text": "This is an image from the webcam of the users laptop. describe the image and provide a caption for linkedin"
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            }
+            ],
+        },
+        ]   
+        params = {
+            "model": "gpt-4-vision-preview",
+            "messages": PROMPT_MESSAGES,
+            "max_tokens": 500,
+        }
+
+        result = st.session_state.client.chat.completions.create(**params)
+        vision_output = result.choices[0].message.content
+
+    print("vision output: ", vision_output)
+    return vision_output
+
 def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id, turn_count, start_time, end_time, conversation_history):
     if 'analyzer' not in st.session_state:
         st.session_state.analyzer = st.session_state.client.beta.assistants.create(
@@ -143,7 +295,7 @@ def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id
                 "in products and content, based on the conversational topics.\n"
                 "8. **AI Response Evaluation**: Evaluate the accuracy and relevance of AI responses in relation to "
                 "subsequent user messages.\n"
-                "9. **Ethical & Societal Concerns**: Note any ethical and societal concerns raised by the user, "
+                "9. **Ethical & Societal Concerns   **: Note any ethical and societal concerns raised by the user, "
                 "particularly regarding technology and AI.\n"
                 "10. **Content & Advertising Recommendations**: Provide suggestions for content themes and advertising "
                 "strategies that align with the user's interests and discussions.\n"
@@ -216,6 +368,16 @@ def analyze_conversation(user_query_analysis, user_query, ai_response, thread_id
     logging.info(json.dumps(log_entry))
     return analyzer_response_value
 
+# Initialize session state if not already done
+if 'timestamps' not in st.session_state:
+    st.session_state['timestamps'] = []
+
+openai.api_key = os.getenv("OPEN_API_KEY")
+if 'client' not in st.session_state:
+    st.session_state.client = OpenAI()
+
+st.title("OpenAI Bot")
+
 with st.sidebar:
     st.title("Audio Input")
     input_audio_flag = st.toggle("Enable audio input", value=False)
@@ -284,50 +446,6 @@ if 'thread' not in st.session_state:
 if "prev_uploaded_file" not in st.session_state: 
     st.session_state.prev_uploaded_file = None
 
-def record_audio():
-        print("Recording...")
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-        frames = []
-        for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-            data = stream.read(CHUNK)
-            frames.append(data)
-        stream.stop_stream()
-        stream.close()
-        wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames))
-        wf.close()
-        print("Finished recording.")
-        return True
-
-def transcribe_audio():
-    try:
-        recording_path = "C:/Users/jatin/Documents/AI/base_1/recording.wav"
-        transcript_text = ""
-        
-        audio_file = open(recording_path, "rb")
-        transcript = st.session_state.client.audio.transcriptions.create(
-            model="whisper-1", 
-            file=audio_file,
-            response_format='text'
-        )
-        
-        # Extract the text from the response
-        transcript_text = transcript['text'] if 'text' in transcript else 'Transcription failed'
-        print(transcript)
-        # Generate a new filename with datetime stamp and 'transcribed' suffix
-        #new_filename = "C:/Users/jatin/Documents/AI/base_1/recording_{}_transcribed.wav".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
-        # Rename the file
-        #os.rename(recording_path, new_filename)
-
-        return transcript
-
-    except Exception as e:
-        # Log the exception details
-        return "error"
-
 prompt = ""
 prompt_audio = ""
 print("Input audio flag: ", input_audio_flag)
@@ -354,7 +472,7 @@ if prompt != "":
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.status("Thinking...", expanded=True) as status:  
+    with st.status("Thinking...", expanded=False) as status:  
         if uploaded_file is not None:
             # To read file as bytes:
             bytes_data = uploaded_file.getvalue()
@@ -409,10 +527,40 @@ if prompt != "":
                 thread_id=st.session_state.thread.id,
                 run_id=run.id
             )
-            status.update(label=run.status, state="running", expanded=True)
+            status.update(label=run.status, state="running", expanded=False)
             if run.status == "completed":
-                status.update(label=run.status, state="complete", expanded=True)
+                status.update(label=run.status, state="complete", expanded=False)
                 break
+            if run.status == "requires_action":
+                msg=[]
+                tool_calls = run.required_action.submit_tool_outputs.tool_calls
+                for i in range(len(tool_calls)):
+                    # if tool_calls[i].function.name == "get_location":
+                    #     msg.append({
+                    #         "tool_call_id": tool_calls[i].id,
+                    #         "output": get_location()
+                    #     })
+                    # if tool_calls[i].function.name == "get_datetime":
+                    #     msg.append({
+                    #         "tool_call_id": tool_calls[i].id,
+                    #         "output": get_datetime()
+                    #     })
+                    if tool_calls[i].function.name == "use_camera":
+                        msg.append({
+                            "tool_call_id": tool_calls[i].id,
+                            "output": use_camera()
+                        })
+                    if tool_calls[i].function.name == "analyze_image":
+                        msg.append({
+                            "tool_call_id": tool_calls[i].id,
+                            "output": analyze_image()
+                        })
+                print("tool output: ", msg)
+                run = st.session_state.client.beta.threads.runs.submit_tool_outputs(
+                    thread_id=st.session_state.thread.id,
+                    run_id=run.id,
+                    tool_outputs=msg
+                )
 
         messages = st.session_state.client.beta.threads.messages.list(
             thread_id=st.session_state.thread.id
@@ -425,9 +573,10 @@ if prompt != "":
     st.session_state.messages.append({"role": "assistant", "content": response})
     with st.chat_message("assistant"):
         st.markdown(response)
+        
+    st.image(r"C:\Users\jatin\Documents\AI\base_1\static\images\webcam_image.jpg", use_column_width=True)
 
     input_audio_flag = False
-
     end_time = datetime.now()
 
     if response_audio_flag and response != "":
