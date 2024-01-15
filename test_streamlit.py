@@ -55,6 +55,8 @@ analyzer_response_value_display=""
 user_token = 0
 ai_token = 0
 total_tokens = 0
+imageFlag = False
+use_camera_flag = False
 
 # Define the basic parameters for the audio recording
 FORMAT = pyaudio.paInt16  # Audio format (16-bit PCM)
@@ -195,7 +197,8 @@ def auto_adjust_brightness_contrast(image, clip_limit=2.0, tile_grid_size=(8, 8)
     
 def capture_image():
     global use_camera_flag
-    #cv2.waitKey(2000)  # Wait for 2000 milliseconds (2 seconds)
+    global imageFlag
+
     # Initialize the camera
     cap = cv2.VideoCapture(0)  # '0' is typically the default value for the laptop's built-in webcam
 
@@ -220,6 +223,7 @@ def capture_image():
         else:
             print("Image captured and saved successfully.")
             use_camera_flag =True
+            imageFlag = True
     else:
         print("Failed to capture image")
 
@@ -248,7 +252,7 @@ def analyze_image():
             "content": [
             {
                 "type": "text",
-                "text": "This is an image from the webcam of the users laptop. describe the image and provide a caption for linkedin"
+                "text": "Analyze this image"
             },
             {
                 "type": "image_url",
@@ -534,6 +538,7 @@ if prompt != "":
             if run.status == "requires_action":
                 msg=[]
                 tool_calls = run.required_action.submit_tool_outputs.tool_calls
+                print(tool_calls)
                 for i in range(len(tool_calls)):
                     # if tool_calls[i].function.name == "get_location":
                     #     msg.append({
@@ -569,12 +574,14 @@ if prompt != "":
     print(messages.data[0].content[0].text.value)
     response = messages.data[0].content[0].text.value
 
+    imageOpen = cv2.imread(r"C:\Users\jatin\Documents\AI\base_1\static\images\webcam_image.jpg")
+
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
     with st.chat_message("assistant"):
         st.markdown(response)
-        
-    st.image(r"C:\Users\jatin\Documents\AI\base_1\static\images\webcam_image.jpg", use_column_width=True)
+        if imageFlag: 
+            st.image(imageOpen, channels="BGR", output_format="JPEG")
 
     input_audio_flag = False
     end_time = datetime.now()
